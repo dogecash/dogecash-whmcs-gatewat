@@ -5,3 +5,7 @@ phpunit.xml
 composer.phar
 composer.lock
 vendor/*
+
+/*
+!modules/gateways/dogecash.php
+!modules/gateways/callback/dogecash.php
