@@ -1,4 +1,5 @@
 <?php
+
 /**
  * WHMCS Sample Payment Callback File
  *
@@ -39,8 +40,30 @@ $success = $_POST["x_status"];
 $invoiceId = $_POST["x_invoice_id"];
 $transactionId = $_POST["x_trans_id"];
 $paymentAmount = $_POST["x_amount"];
-$paymentFee = $_POST["x_fee"];
+$cryptoAmount = $_POST["x_crypto_amount"];
+$paymentAddress = $_POST["x_address"];
+$paymentOrderTime = $_POST["x_order_time"];
 $hash = $_POST["x_hash"];
+$paymentMaxTime = $_POST["x_maxtime"];
+$paymentConfirmations = $_POST["x_confirmations"];
+$redirectLink = urldecode($_POST["x_redirect_link"]);
+
+function checkTransaction($paymentAddress, $cryptoAmount, $paymentOrderTime, $hash, $paymentConfirmations, $paymentMaxTime)
+{
+    $request = file_get_contents("https://payment-checker.dogecash.org/?address=$paymentAddress&amount=$cryptoAmount&otime=$paymentOrderTime&tx=$hash&conf=$paymentConfirmations&mtime=$paymentMaxTime");
+    $data = json_decode($request, true);
+    if ($data["status"] == "confirmed") {
+        return true;
+    }
+    return false;
+}
+
+$transactionConfirmed = checkTransaction($paymentAddress, $cryptoAmount, $paymentOrderTime, $hash, $paymentConfirmations, $paymentMaxTime);
+
+if (!$transactionConfirmed) {
+    $success = false;
+    $transactionStatus = "Transaction couldn't be verified. If you think this is a mistake, contact support with your transaction ID.";
+}
 
 $transactionStatus = $success ? 'Success' : 'Failure';
 
@@ -51,8 +74,8 @@ $transactionStatus = $success ? 'Success' : 'Failure';
  * originated from them. In the case of our example here, this is achieved by
  * way of a shared secret which is used to build and compare a hash.
  */
-$secretKey = $gatewayParams['secretKey'];
-if ($hash != md5($invoiceId . $transactionId . $paymentAmount . $secretKey)) {
+$secretKey = $gatewayParams['dogecash_secretkey'];
+if ($hash != hash('sha256', $invoiceId . $cryptoAmount . $secretKey)) {
     $transactionStatus = 'Hash Verification Failure';
     $success = false;
 }
@@ -115,8 +138,9 @@ if ($success) {
         $invoiceId,
         $transactionId,
         $paymentAmount,
-        $paymentFee,
+        0,
         $gatewayModuleName
     );
-
 }
+
+header("Location: $redirectLink");

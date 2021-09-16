@@ -1,4 +1,5 @@
 <?php
+
 /**
  * WHMCS Sample Payment Gateway Module
  *
@@ -39,10 +40,10 @@ if (!defined("WHMCS")) {
  *
  * @return array
  */
-function gatewaymodule_MetaData()
+function dogecash_MetaData()
 {
     return array(
-        'DisplayName' => 'Sample Payment Gateway Module',
+        'DisplayName' => 'DogeCash',
         'APIVersion' => '1.1', // Use API Version 1.1
         'DisableLocalCreditCardInput' => true,
         'TokenisedStorage' => false,
@@ -69,62 +70,40 @@ function gatewaymodule_MetaData()
  *
  * @return array
  */
-function gatewaymodule_config()
+function dogecash_config()
 {
     return array(
-        // the friendly display name for a payment gateway should be
-        // defined here for backwards compatibility
         'FriendlyName' => array(
             'Type' => 'System',
-            'Value' => 'Sample Third Party Payment Gateway Module',
+            'Value' => 'DogeCash Gateway',
         ),
-        // a text field type allows for single line text input
-        'accountID' => array(
-            'FriendlyName' => 'Account ID',
+        'dogecash_address' => array(
+            'FriendlyName' => 'DogeCash Address',
             'Type' => 'text',
-            'Size' => '25',
+            'Size' => '34',
             'Default' => '',
-            'Description' => 'Enter your account ID here',
+            'Description' => 'Your DogeCash Address',
         ),
-        // a password field type allows for masked text input
-        'secretKey' => array(
-            'FriendlyName' => 'Secret Key',
+        'dogecash_confirmations' => array(
+            'FriendlyName' => 'Confirmations',
+            'Type' => 'text',
+            'Size' => '3',
+            'Default' => '10',
+            'Description' => 'Number of confirmations upon which the order will be considered as confirmed',
+        ),
+        'dogecash_maxtime' => array(
+            'FriendlyName' => 'Maximum Payment Time (in Minutes)',
+            'Type' => 'text',
+            'Size' => '3',
+            'Default' => '20',
+            'Description' => 'Time allowed for a user to make the required payment.',
+        ),
+        'dogecash_secretkey' => array(
+            'FriendlyName' => 'Secret key',
             'Type' => 'password',
-            'Size' => '25',
-            'Default' => '',
-            'Description' => 'Enter secret key here',
-        ),
-        // the yesno field type displays a single checkbox option
-        'testMode' => array(
-            'FriendlyName' => 'Test Mode',
-            'Type' => 'yesno',
-            'Description' => 'Tick to enable test mode',
-        ),
-        // the dropdown field type renders a select menu of options
-        'dropdownField' => array(
-            'FriendlyName' => 'Dropdown Field',
-            'Type' => 'dropdown',
-            'Options' => array(
-                'option1' => 'Display Value 1',
-                'option2' => 'Second Option',
-                'option3' => 'Another Option',
-            ),
-            'Description' => 'Choose one',
-        ),
-        // the radio field type displays a series of radio button options
-        'radioField' => array(
-            'FriendlyName' => 'Radio Field',
-            'Type' => 'radio',
-            'Options' => 'First Option,Second Option,Third Option',
-            'Description' => 'Choose your option!',
-        ),
-        // the textarea field type allows for multi-line text input
-        'textareaField' => array(
-            'FriendlyName' => 'Textarea Field',
-            'Type' => 'textarea',
-            'Rows' => '3',
-            'Cols' => '60',
-            'Description' => 'Freeform multi-line text input field',
+            'Size' => '30',
+            'Default' => substr(str_repeat(md5(rand()), ceil(20 / 32)), 0, 20),
+            'Description' => 'This random key won\'t allow script crackers to impersonate payments. The default value is good enough.',
         ),
     );
 }
@@ -143,63 +122,49 @@ function gatewaymodule_config()
  *
  * @return string
  */
-function gatewaymodule_link($params)
+function dogecash_link($params)
 {
-    // Gateway Configuration Parameters
-    $accountId = $params['accountID'];
-    $secretKey = $params['secretKey'];
-    $testMode = $params['testMode'];
-    $dropdownField = $params['dropdownField'];
-    $radioField = $params['radioField'];
-    $textareaField = $params['textareaField'];
-
     // Invoice Parameters
     $invoiceId = $params['invoiceid'];
-    $description = $params["description"];
     $amount = $params['amount'];
     $currencyCode = $params['currency'];
 
-    // Client Parameters
-    $firstname = $params['clientdetails']['firstname'];
-    $lastname = $params['clientdetails']['lastname'];
-    $email = $params['clientdetails']['email'];
-    $address1 = $params['clientdetails']['address1'];
-    $address2 = $params['clientdetails']['address2'];
-    $city = $params['clientdetails']['city'];
-    $state = $params['clientdetails']['state'];
-    $postcode = $params['clientdetails']['postcode'];
-    $country = $params['clientdetails']['country'];
-    $phone = $params['clientdetails']['phonenumber'];
+    $cryptoConversion = convertToDogeCash($amount, $currencyCode);
+
+    $cryptoRate = $cryptoConversion['rate'];
+    $cryptoAmount = $cryptoConversion['amount'];
+    $order_time = time();
+    $current_link = "http://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
 
     // System Parameters
-    $companyName = $params['companyname'];
     $systemUrl = $params['systemurl'];
     $returnUrl = $params['returnurl'];
     $langPayNow = $params['langpaynow'];
-    $moduleDisplayName = $params['name'];
     $moduleName = $params['paymentmethod'];
-    $whmcsVersion = $params['whmcsVersion'];
+    $crypto_address = $params['dogecash_address'];
+    $max_time = $params['dogecash_maxtime'];
+    $required_confirmations = $params['dogecash_confirmations'];
+    $secretKey = $params['dogecash_secretkey'];
+    $hash = hash('sha256', $invoiceId . $cryptoAmount . $secretKey);
 
-    $url = 'https://www.demopaymentgateway.com/do.payment';
+    $url = '/modules/gateways/dogecash/receivePayment.php';
 
     $postfields = array();
-    $postfields['username'] = $username;
     $postfields['invoice_id'] = $invoiceId;
-    $postfields['description'] = $description;
-    $postfields['amount'] = $amount;
-    $postfields['currency'] = $currencyCode;
-    $postfields['first_name'] = $firstname;
-    $postfields['last_name'] = $lastname;
-    $postfields['email'] = $email;
-    $postfields['address1'] = $address1;
-    $postfields['address2'] = $address2;
-    $postfields['city'] = $city;
-    $postfields['state'] = $state;
-    $postfields['postcode'] = $postcode;
-    $postfields['country'] = $country;
-    $postfields['phone'] = $phone;
-    $postfields['callback_url'] = $systemUrl . '/modules/gateways/callback/' . $moduleName . '.php';
+    $postfields['fiat_amount'] = $amount;
     $postfields['return_url'] = $returnUrl;
+    $postfields['currency'] = $currencyCode;
+    $postfields['crypto_rate'] = $cryptoRate;
+    $postfields['crypto_amount'] = $cryptoAmount;
+    $postfields['crypto_address'] = $crypto_address;
+    $postfields['payment_maxtime'] = $max_time;
+    $postfields['order_time'] = $order_time;
+    $postfields['payment_confirmations'] = $required_confirmations;
+    $postfields['redirect_link'] = $current_link;
+
+
+    $postfields['callback_url'] = $systemUrl . '/modules/gateways/callback/' . $moduleName . '.php';
+    $postfields['hash'] = $hash;
 
     $htmlOutput = '<form method="post" action="' . $url . '">';
     foreach ($postfields as $k => $v) {
@@ -211,106 +176,27 @@ function gatewaymodule_link($params)
     return $htmlOutput;
 }
 
-/**
- * Refund transaction.
- *
- * Called when a refund is requested for a previously successful transaction.
- *
- * @param array $params Payment Gateway Module Parameters
- *
- * @see https://developers.whmcs.com/payment-gateways/refunds/
- *
- * @return array Transaction response status
- */
-function gatewaymodule_refund($params)
-{
-    // Gateway Configuration Parameters
-    $accountId = $params['accountID'];
-    $secretKey = $params['secretKey'];
-    $testMode = $params['testMode'];
-    $dropdownField = $params['dropdownField'];
-    $radioField = $params['radioField'];
-    $textareaField = $params['textareaField'];
-
-    // Transaction Parameters
-    $transactionIdToRefund = $params['transid'];
-    $refundAmount = $params['amount'];
-    $currencyCode = $params['currency'];
-
-    // Client Parameters
-    $firstname = $params['clientdetails']['firstname'];
-    $lastname = $params['clientdetails']['lastname'];
-    $email = $params['clientdetails']['email'];
-    $address1 = $params['clientdetails']['address1'];
-    $address2 = $params['clientdetails']['address2'];
-    $city = $params['clientdetails']['city'];
-    $state = $params['clientdetails']['state'];
-    $postcode = $params['clientdetails']['postcode'];
-    $country = $params['clientdetails']['country'];
-    $phone = $params['clientdetails']['phonenumber'];
-
-    // System Parameters
-    $companyName = $params['companyname'];
-    $systemUrl = $params['systemurl'];
-    $langPayNow = $params['langpaynow'];
-    $moduleDisplayName = $params['name'];
-    $moduleName = $params['paymentmethod'];
-    $whmcsVersion = $params['whmcsVersion'];
-
-    // perform API call to initiate refund and interpret result
-
-    return array(
-        // 'success' if successful, otherwise 'declined', 'error' for failure
-        'status' => 'success',
-        // Data to be recorded in the gateway log - can be a string or array
-        'rawdata' => $responseData,
-        // Unique Transaction ID for the refund transaction
-        'transid' => $refundTransactionId,
-        // Optional fee amount for the fee value refunded
-        'fees' => $feeAmount,
-    );
-}
 
 /**
- * Cancel subscription.
+ * Helper function.
  *
- * If the payment gateway creates subscriptions and stores the subscription
- * ID in tblhosting.subscriptionid, this function is called upon cancellation
- * or request by an admin user.
+ * Receives value & currency and returns value in DogeCash
+ * 
  *
- * @param array $params Payment Gateway Module Parameters
- *
- * @see https://developers.whmcs.com/payment-gateways/subscription-management/
- *
- * @return array Transaction response status
+ * @return float
  */
-function gatewaymodule_cancelSubscription($params)
+function convertToDogeCash($value, $currency)
 {
-    // Gateway Configuration Parameters
-    $accountId = $params['accountID'];
-    $secretKey = $params['secretKey'];
-    $testMode = $params['testMode'];
-    $dropdownField = $params['dropdownField'];
-    $radioField = $params['radioField'];
-    $textareaField = $params['textareaField'];
-
-    // Subscription Parameters
-    $subscriptionIdToCancel = $params['subscriptionID'];
-
-    // System Parameters
-    $companyName = $params['companyname'];
-    $systemUrl = $params['systemurl'];
-    $langPayNow = $params['langpaynow'];
-    $moduleDisplayName = $params['name'];
-    $moduleName = $params['paymentmethod'];
-    $whmcsVersion = $params['whmcsVersion'];
-
-    // perform API call to cancel subscription and interpret result
-
-    return array(
-        // 'success' if successful, any other value for failure
-        'status' => 'success',
-        // Data to be recorded in the gateway log - can be a string or array
-        'rawdata' => $responseData,
-    );
+    try {
+        $request = file_get_contents("https://api.coingecko.com/api/v3/coins/dogecash");
+        $data = json_decode($request, true);
+        $price = $data['market_data']['current_price'][strtolower($currency)];
+        $amount = $value / $price;
+        return [
+            'rate' => round($price, 2),
+            'amount' => round($amount, 2)
+        ];
+    } catch (\Throwable $e) {
+        echo $e->getMessage();
+    }
 }
