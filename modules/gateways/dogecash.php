@@ -129,12 +129,7 @@ function dogecash_link($params)
     $amount = $params['amount'];
     $currencyCode = $params['currency'];
 
-    $cryptoConversion = convertToDogeCash($amount, $currencyCode);
 
-    $cryptoRate = $cryptoConversion['rate'];
-    $cryptoAmount = $cryptoConversion['amount'];
-    $order_time = time();
-    $current_link = "http://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
 
     // System Parameters
     $systemUrl = $params['systemurl'];
@@ -142,12 +137,24 @@ function dogecash_link($params)
     $langPayNow = $params['langpaynow'];
     $moduleName = $params['paymentmethod'];
     $crypto_address = $params['dogecash_address'];
-    $max_time = $params['dogecash_maxtime'];
+    $maxTime = $params['dogecash_maxtime'];
     $required_confirmations = $params['dogecash_confirmations'];
     $secretKey = $params['dogecash_secretkey'];
+
+    $cryptoConversion = convertToDogeCash($amount, $currencyCode, $invoiceId, $maxTime);
+
+    $cryptoRate = $cryptoConversion['rate'];
+    $cryptoAmount = $cryptoConversion['amount'];
+    $order_time = time();
+
     $hash = hash('sha256', $invoiceId . $cryptoAmount . $secretKey);
 
     $url = '/modules/gateways/dogecash/receivePayment.php';
+
+    localAPI('UpdateInvoice', [
+        'invoiceid' => $invoiceId,
+        'notes' => "$cryptoAmount DOGEC"
+    ]);
 
     $postfields = array();
     $postfields['invoice_id'] = $invoiceId;
@@ -157,10 +164,9 @@ function dogecash_link($params)
     $postfields['crypto_rate'] = $cryptoRate;
     $postfields['crypto_amount'] = $cryptoAmount;
     $postfields['crypto_address'] = $crypto_address;
-    $postfields['payment_maxtime'] = $max_time;
+    $postfields['payment_maxtime'] = $maxTime;
     $postfields['order_time'] = $order_time;
     $postfields['payment_confirmations'] = $required_confirmations;
-    $postfields['redirect_link'] = $current_link;
 
 
     $postfields['callback_url'] = $systemUrl . '/modules/gateways/callback/' . $moduleName . '.php';
@@ -185,16 +191,34 @@ function dogecash_link($params)
  *
  * @return float
  */
-function convertToDogeCash($value, $currency)
+function convertToDogeCash($value, $currency, $invoiceId, $maxtime)
 {
     try {
         $request = file_get_contents("https://api.coingecko.com/api/v3/coins/dogecash");
         $data = json_decode($request, true);
         $price = $data['market_data']['current_price'][strtolower($currency)];
-        $amount = $value / $price;
+        $amount = round($value / $price, 2);
+
+        $results = localAPI('GetInvoices', [
+            'status' => 'Unpaid',
+            'orderby' => 'date'
+        ]);
+
+        $difference = 0.001;
+
+        foreach ($results['invoices']['invoice'] as $result) {
+            $invoiceDueRate = new DateTime($result["updated_at"]);
+            $currentTime = new DateTime();
+            $invoiceDueRate->modify("+$maxtime minutes");
+
+            if ($result['id'] != $invoiceId && $result['paymentmethod'] == 'dogecash' && str_replace('DOGEC', '', $result['notes']) == $amount && $currentTime < $invoiceDueRate) {
+                $amount += $difference;
+            }
+        }
+
         return [
             'rate' => round($price, 2),
-            'amount' => round($amount, 2)
+            'amount' => $amount
         ];
     } catch (\Throwable $e) {
         echo $e->getMessage();

@@ -38,7 +38,7 @@ if (!$gatewayParams['type']) {
 // Varies per payment gateway
 $success = $_POST["x_status"];
 $invoiceId = $_POST["x_invoice_id"];
-$transactionId = $_POST["x_trans_id"];
+$transactionId = $_POST["x_txid"];
 $paymentAmount = $_POST["x_amount"];
 $cryptoAmount = $_POST["x_crypto_amount"];
 $paymentAddress = $_POST["x_address"];
@@ -46,7 +46,6 @@ $paymentOrderTime = $_POST["x_order_time"];
 $hash = $_POST["x_hash"];
 $paymentMaxTime = $_POST["x_maxtime"];
 $paymentConfirmations = $_POST["x_confirmations"];
-$redirectLink = urldecode($_POST["x_redirect_link"]);
 
 function checkTransaction($paymentAddress, $cryptoAmount, $paymentOrderTime, $hash, $paymentConfirmations, $paymentMaxTime)
 {
@@ -59,6 +58,7 @@ function checkTransaction($paymentAddress, $cryptoAmount, $paymentOrderTime, $ha
 }
 
 $transactionConfirmed = checkTransaction($paymentAddress, $cryptoAmount, $paymentOrderTime, $hash, $paymentConfirmations, $paymentMaxTime);
+
 
 if (!$transactionConfirmed) {
     $success = false;
@@ -121,6 +121,7 @@ checkCbTransID($transactionId);
  */
 logTransaction($gatewayParams['name'], $_POST, $transactionStatus);
 
+
 if ($success) {
 
     /**
@@ -143,4 +144,7 @@ if ($success) {
     );
 }
 
-header("Location: $redirectLink");
+global $CONFIG;
+$URL = $CONFIG['SystemURL'];
+
+header("Location: $URL/viewinvoice.php?id=$invoiceId");
